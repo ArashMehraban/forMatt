@@ -8,7 +8,7 @@ by using the command line option -nolex
 How to run: \
 `./main -mesh cube_1e_6ss_s.exo -petscspace_degree 1 ` \
 or\
-`./main -mesh cube_1e_6ss_s.exo -petscspace_degree 1 -nolex` \
+`./main -mesh cube_1e_6ss_s.exo -petscspace_degree 1 -nolex` 
 
 **The result from: `./main -mesh cube_1e_6ss_s.exo -petscspace_degree 1:`**
 ```
