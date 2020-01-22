@@ -25,9 +25,11 @@ int main(int argc, char **argv) {
   MPI_Comm    comm;
   char        filename[PETSC_MAX_PATH_LEN];
   PetscBool   fileFlag = PETSC_FALSE;
-  PetscBool   permTensorFlag = PETSC_FALSE;
+  PetscBool   permTensorFlagDM = PETSC_FALSE;
+  PetscBool   permTensorFlagCoordDM = PETSC_FALSE;
   DM          dm, distributedMesh;
   DM          dmcoord;
+  PetscSection cs;
   PetscBool   interpolate = PETSC_TRUE;
   PetscPartitioner part;
   PetscFE     fe;
@@ -53,8 +55,10 @@ int main(int argc, char **argv) {
           "ExodusII support needed. Reconfigure your Arch with --download-exodusii");
   #endif
 
-  ierr = PetscOptionsBool("-nolex", "Not use DMPlexSetClosurePermutationTensor() for coordinates",
-         NULL,permTensorFlag, &permTensorFlag, NULL); CHKERRQ(ierr);
+  ierr = PetscOptionsBool("-nolexDM", "Not use DMPlexSetClosurePermutationTensor() for DM",
+         NULL,permTensorFlagDM, &permTensorFlagDM, NULL); CHKERRQ(ierr);
+  ierr = PetscOptionsBool("-nolexCoordDM", "Not use DMPlexSetClosurePermutationTensor() for CoordinateDM",
+         NULL,permTensorFlagCoordDM, &permTensorFlagCoordDM, NULL); CHKERRQ(ierr);
   PetscOptionsEnd();
 
   //Create and distribute dm
@@ -66,6 +70,8 @@ int main(int argc, char **argv) {
     ierr = DMDestroy(&dm); CHKERRQ(ierr);
     dm  = distributedMesh;
   }
+
+ ierr = PetscPrintf(comm, "Parent DM:     %s\nCoordinate DM: %s\n\n", permTensorFlagDM ? "not permuted" : "permuted", permTensorFlagCoordDM ? "not permuted" : "permuted"); CHKERRQ(ierr);
 
   //Setup FE for DM
   PetscFECreateDefault(comm,3,3,PETSC_FALSE, NULL, PETSC_DETERMINE, &fe);
@@ -85,15 +91,20 @@ int main(int argc, char **argv) {
   }
   ierr = ISRestoreIndices(faceSetIS, &faceSetIds); CHKERRQ(ierr);
   ierr = ISDestroy(&faceSetIS); CHKERRQ(ierr);
-  if(!permTensorFlag){
+  if(!permTensorFlagDM){
       ierr = DMPlexSetClosurePermutationTensor(dm, PETSC_DETERMINE, NULL); CHKERRQ(ierr);
   }
   ierr = PetscFEDestroy(&fe); CHKERRQ(ierr);
 
   // Viewing the CoordinateDM
   ierr = DMGetCoordinateDM(dm, &dmcoord); CHKERRQ(ierr);
-  ierr = DMPlexSetClosurePermutationTensor(dmcoord, PETSC_DETERMINE, NULL); CHKERRQ(ierr);
+  ierr = DMGetCoordinateSection(dm, &cs); CHKERRQ(ierr);
+  if(!permTensorFlagCoordDM){
+    ierr = DMPlexSetClosurePermutationTensor(dmcoord, PETSC_DETERMINE, cs); CHKERRQ(ierr);
+  }
   ierr = DMGetCoordinatesLocal(dm, &coords); CHKERRQ(ierr);
+
+  ierr = PetscPrintf(comm, "Local Coordinates from CoordinateDM\n");CHKERRQ(ierr);
   ierr = VecView(coords,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
 
   ierr = PetscPrintf(comm, "\n\n");CHKERRQ(ierr);
@@ -102,7 +113,8 @@ int main(int argc, char **argv) {
   ierr = DMGetLocalVector(dm,&Xloc);CHKERRQ(ierr);
   PetscInt Xloc_sz;
   ierr = VecGetSize(Xloc, &Xloc_sz);CHKERRQ(ierr);
-  ierr = PetscPrintf(comm, "Xloc Size %D\n", Xloc_sz);CHKERRQ(ierr);
+
+  ierr = PetscPrintf(comm, "Boundary Values\n");CHKERRQ(ierr);
   ierr = VecSet(Xloc, -42); // clearly not a boundary coordinate
   ierr = DMPlexInsertBoundaryValues(dm, PETSC_TRUE, Xloc, 0, NULL, NULL, NULL); CHKERRQ(ierr);
   ierr = VecView(Xloc,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
